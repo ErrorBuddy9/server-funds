@@ -35,7 +35,6 @@ st.markdown("""
         background: linear-gradient(180deg, #007AFF 0%, #0056D2 100%);
         color: white; border: none; font-weight: 600;
     }
-    /* Style the dataframe to match */
     .stDataFrame {
         background: rgba(255, 255, 255, 0.05);
         border-radius: 15px;
@@ -57,7 +56,6 @@ if not st.session_state['logged_in']:
         if st.button("Create Account"):
             hashed_pw = make_hashes(reg_pass)
             try:
-                # Inserting into 'users' table
                 supabase.table("users").insert({"username": reg_user, "password": hashed_pw}).execute()
                 st.success("Account Created! Go to Sign In.")
             except:
@@ -89,15 +87,15 @@ if funds_response.data:
 else:
     df = pd.DataFrame(columns=["id", "type", "user", "amount", "note", "created_at"])
 
-# 2. Calculate Metrics
+# 2. Calculate Metrics (LKR)
 total_in = df[df["type"] == "Add"]["amount"].sum()
 total_out = df[df["type"] == "Withdraw"]["amount"].sum()
 current_balance = total_in - total_out
 
 m1, m2, m3 = st.columns(3)
-m1.metric("Current Balance", f"${current_balance:,.2f}")
-m2.metric("Total Collected", f"${total_in:,.2f}")
-m3.metric("Total Spent", f"${total_out:,.2f}")
+m1.metric("Current Balance", f"Rs. {current_balance:,.2f}")
+m2.metric("Total Collected", f"Rs. {total_in:,.2f}")
+m3.metric("Total Spent", f"Rs. {total_out:,.2f}")
 
 st.divider()
 
@@ -108,7 +106,7 @@ with col1:
     st.subheader("📝 New Transaction")
     with st.form("fund_form", clear_on_submit=True):
         t_type = st.radio("Type", ["Add", "Withdraw"], horizontal=True)
-        t_amt = st.number_input("Amount ($)", min_value=0.0, step=1.0)
+        t_amt = st.number_input("Amount (LKR)", min_value=0.0, step=100.0)
         t_note = st.text_input("Note / Purpose")
         
         if st.form_submit_button("Submit"):
@@ -130,6 +128,7 @@ with col2:
     if not df.empty:
         # Show top users who added funds
         leaders = df[df["type"] == "Add"].groupby("user")["amount"].sum().sort_values(ascending=False).reset_index()
+        leaders.columns = ["Username", "Total Contributed (Rs.)"]
         st.dataframe(leaders, use_container_width=True, hide_index=True)
     else:
         st.info("No data yet.")
@@ -137,8 +136,10 @@ with col2:
 # 4. History Table
 st.subheader("📜 Recent Activity")
 if not df.empty:
-    # Show newest transactions at the top
-    st.dataframe(df.sort_values("id", ascending=False), use_container_width=True, hide_index=True)
+    history_df = df.sort_values("id", ascending=False).copy()
+    # Formatting for better display
+    history_df.columns = ["ID", "Type", "Username", "Amount (Rs.)", "Note", "Timestamp"]
+    st.dataframe(history_df, use_container_width=True, hide_index=True)
 else:
     st.info("No transactions recorded.")
 
