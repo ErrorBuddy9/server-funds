@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+from st_gsheets_connection import GSheetsConnection
 import pandas as pd
 import hashlib
 
@@ -87,4 +87,5 @@ try:
     st.dataframe(funds_df, use_container_width=True)
 except:
     st.warning("Could not load Fund history.")
+
 
