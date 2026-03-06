@@ -161,7 +161,7 @@ else:
     in_amt = out_amt = bal = this_week_adds = last_week_adds = velocity = daily_avg = 0
 
 # --- 7. DASHBOARD HEADER ---
-st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Global Intelligence Hub</h1></div>', unsafe_allow_html=True)
+st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Dashboard</h1></div>', unsafe_allow_html=True)
 
 # TARGET PILLS
 target_res = supabase.table("targets").select("*").eq("is_archived", False).execute()
@@ -238,4 +238,5 @@ if not df.empty:
 if st.sidebar.button("LOGOUT"):
     st.session_state.update({"logged_in": False})
     st.rerun()
+
 
