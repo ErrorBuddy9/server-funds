@@ -3,7 +3,7 @@ from supabase import create_client, Client
 import pandas as pd
 import hashlib
 import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone # Added timezone
 import numpy as np
 
 # --- PAGE CONFIG ---
@@ -40,7 +40,7 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
-    /* 1. AGGRESSIVE ARROW KILLER (Top Left Fix) */
+    /* 1. AGGRESSIVE ARROW KILLER */
     [data-testid="collapsedControl"], 
     .st-emotion-cache-6qob1r, 
     .st-emotion-cache-1f3w014, 
@@ -52,7 +52,7 @@ st.markdown(f"""
     
     .block-container {{ padding-top: 1.5rem !important; }}
 
-    /* 2. LIQUID GLASS BACKGROUND (95% Dark Overlay) */
+    /* 2. LIQUID GLASS BACKGROUND */
     .stApp {{
         background: 
             radial-gradient(circle at 50% 50%, rgba(10, 10, 25, 0.8) 0%, rgba(0,0,0,0.96) 100%),
@@ -63,18 +63,16 @@ st.markdown(f"""
         font-family: 'Inter', sans-serif !important;
     }}
     
-    /* 3. NEON-ACCENTED GLASS PANELS */
+    /* 3. GLASS PANELS */
     div[data-testid="stColumn"], div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] > div {{
         background: rgba(255, 255, 255, 0.02) !important; 
         backdrop-filter: blur(50px) saturate(180%) !important;
-        -webkit-backdrop-filter: blur(50px) saturate(180%) !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
         border-radius: 20px !important;
         padding: 20px !important;
-        box-shadow: 0 15px 35px rgba(0,0,0,0.6);
     }}
 
-    /* 4. LIQUID PROGRESS BARS (Pill Style) */
+    /* 4. PROGRESS BARS */
     .stProgress > div > div > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         border-radius: 50px;
@@ -83,20 +81,18 @@ st.markdown(f"""
     .stProgress > div > div > div > div {{
         background: linear-gradient(90deg, #00f2fe 0%, #3a47d5 100%) !important;
         border-radius: 50px;
-        box-shadow: 0 0 10px rgba(0, 242, 254, 0.6);
     }}
 
-    /* 5. TYPOGRAPHY & METRICS */
+    /* 5. TYPOGRAPHY */
     h1, h2, h3, p, span, label, [data-testid="stMetricValue"] {{
         font-family: 'Inter', sans-serif !important;
         font-weight: 800 !important;
         color: white !important;
-        letter-spacing: -0.04em;
     }}
     
     [data-testid="stMetricValue"] {{ font-size: 1.6rem !important; color: #00f2fe !important; }}
 
-    /* 6. INPUT FIELD SYNC (Perfect Corners) */
+    /* 6. INPUTS */
     .stTextInput>div>div, .stNumberInput>div>div, .stSelectbox>div>div {{
         border-radius: 12px !important;
         background: rgba(255, 255, 255, 0.04) !important;
@@ -112,11 +108,6 @@ st.markdown(f"""
         border: 1px solid rgba(0, 242, 254, 0.3) !important;
         color: white !important;
         font-weight: 700 !important;
-        transition: 0.3s;
-    }}
-    .stButton>button:hover {{
-        background: rgba(0, 242, 254, 0.2) !important;
-        box-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -148,17 +139,20 @@ df = pd.DataFrame(funds_res.data) if funds_res.data else pd.DataFrame()
 
 if not df.empty:
     df["amount"] = pd.to_numeric(df["amount"])
-    df["created_at"] = pd.to_datetime(df["created_at"])
+    # Convert created_at to datetime and ensure UTC awareness
+    df["created_at"] = pd.to_datetime(df["created_at"], utc=True) 
     df['net'] = df.apply(lambda x: x['amount'] if x['type']=='Add' else -x['amount'], axis=1)
     
     in_amt = df[df["type"] == "Add"]["amount"].sum()
     out_amt = df[df["type"] == "Withdraw"]["amount"].sum()
     bal = in_amt - out_amt
 
-    # --- WEEKLY COMPARISON LOGIC ---
-    now = datetime.now()
+    # --- FIXED WEEKLY COMPARISON (Using timezone.utc) ---
+    now = datetime.now(timezone.utc)
     this_week_start = now - timedelta(days=now.weekday())
+    this_week_start = this_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
     last_week_start = this_week_start - timedelta(days=7)
+
     this_week_adds = df[(df['created_at'] >= this_week_start) & (df['type'] == 'Add')]['amount'].sum()
     last_week_adds = df[(df['created_at'] >= last_week_start) & (df['created_at'] < this_week_start) & (df['type'] == 'Add')]['amount'].sum()
     
@@ -168,10 +162,9 @@ if not df.empty:
 else:
     in_amt = out_amt = bal = this_week_adds = last_week_adds = daily_avg = 0
 
-# --- DASHBOARD HEADER ---
+# --- HEADER & MINIMIZED TARGETS ---
 st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Intelligence Treasury</h1></div>', unsafe_allow_html=True)
 
-# MINIMIZED TARGETS (Global)
 target_res = supabase.table("targets").select("*").eq("is_archived", False).execute()
 if target_res.data:
     t_cols = st.columns(len(target_res.data))
@@ -184,7 +177,7 @@ if target_res.data:
             if prog >= 1.0:
                 trigger_notification("🎯 Goal Reached!", f"Target {t['goal_name']} is 100% funded.")
 
-# --- ANALYTICS & AI INSIGHTS ---
+# --- ANALYTICS ---
 st.write("")
 c_metrics, c_ai = st.columns([1.5, 1])
 
@@ -200,8 +193,10 @@ with c_ai:
         rem = float(t['target_amount']) - bal
         if rem > 0:
             days = int(rem / daily_avg)
-            finish = (datetime.now() + timedelta(days=days)).strftime("%b %d, %Y")
+            finish = (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%b %d, %Y")
             st.markdown(f"<div style='background:rgba(0,242,254,0.05); padding:10px; border-radius:15px; border:1px solid rgba(0,242,254,0.2);'><p style='margin:0; font-size:0.8rem;'>🧠 <b>AI Projection:</b> '{t['goal_name']}' likely finished by <b>{finish}</b> ({days} days).</p></div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<p style='font-size:0.7rem; opacity:0.5;'>🧠 AI needs more data to project timeline...</p>", unsafe_allow_html=True)
 
 # --- CHARTS ---
 st.write("")
@@ -243,7 +238,7 @@ with f2:
             supabase.table("targets").insert({"goal_name": gn, "target_amount": ga, "created_by": user_now}).execute()
             st.rerun()
 
-# --- LOG ---
+# --- RECENT ACTIVITY ---
 st.write("")
 st.markdown("#### 📜 Recent Activity")
 if not df.empty:
