@@ -3,36 +3,34 @@ from supabase import create_client, Client
 import pandas as pd
 import hashlib
 import plotly.express as px
-from datetime import datetime, timedelta, timezone # Added timezone
+from datetime import datetime, timedelta, timezone
 import numpy as np
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="Intelligence Treasury v4", layout="wide", initial_sidebar_state="collapsed")
+# --- 1. PAGE CONFIG ---
+st.set_page_config(page_title="Intelligence Treasury v5", layout="wide", initial_sidebar_state="collapsed")
 
-# --- INITIALIZE SUPABASE ---
+# --- 2. INITIALIZE SUPABASE ---
 @st.cache_resource
 def init_connection():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 supabase = init_connection()
 
-# --- UTILS ---
+# --- 3. UTILS & AUTH ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-# --- CSS: THE LIQUID GLASS ENGINE + ARROW KILLER + NOTIFICATION JS ---
+# --- 4. CSS: LIQUID GLASS UI + HOVER GLOW + NOTIFICATION ENGINE ---
 st.markdown(f"""
     <script>
     function notifyMe(title, message) {{
         if (!("Notification" in window)) {{
-            console.log("This browser does not support desktop notification");
+            console.log("Browser does not support notifications");
         }} else if (Notification.permission === "granted") {{
             new Notification(title, {{body: message}});
         }} else if (Notification.permission !== "denied") {{
-            Notification.requestPermission().then(function (permission) {{
-                if (permission === "granted") {{
-                    new Notification(title, {{body: message}});
-                }}
+            Notification.requestPermission().then(function (p) {{
+                if (p === "granted") new Notification(title, {{body: message}});
             }});
         }}
     }}
@@ -40,11 +38,8 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
-    /* 1. AGGRESSIVE ARROW KILLER */
-    [data-testid="collapsedControl"], 
-    .st-emotion-cache-6qob1r, 
-    .st-emotion-cache-1f3w014, 
-    header[data-testid="stHeader"] {{
+    /* AGGRESSIVE ARROW KILLER (Top Left Fix) */
+    [data-testid="collapsedControl"], .st-emotion-cache-6qob1r, .st-emotion-cache-1f3w014, header[data-testid="stHeader"] {{
         display: none !important;
         visibility: hidden !important;
         height: 0px !important;
@@ -52,10 +47,10 @@ st.markdown(f"""
     
     .block-container {{ padding-top: 1.5rem !important; }}
 
-    /* 2. LIQUID GLASS BACKGROUND */
+    /* LIQUID GLASS BACKGROUND (96% Dark Overlay) */
     .stApp {{
         background: 
-            radial-gradient(circle at 50% 50%, rgba(10, 10, 25, 0.8) 0%, rgba(0,0,0,0.96) 100%),
+            radial-gradient(circle at 50% 50%, rgba(10, 10, 25, 0.85) 0%, rgba(0,0,0,0.97) 100%),
             url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop');
         background-size: cover;
         background-position: center;
@@ -63,51 +58,57 @@ st.markdown(f"""
         font-family: 'Inter', sans-serif !important;
     }}
     
-    /* 3. GLASS PANELS */
+    /* NEON-ACCENTED GLASS PANELS WITH HOVER GLOW */
     div[data-testid="stColumn"], div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] > div {{
         background: rgba(255, 255, 255, 0.02) !important; 
-        backdrop-filter: blur(50px) saturate(180%) !important;
+        backdrop-filter: blur(55px) saturate(180%) !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
         border-radius: 20px !important;
         padding: 20px !important;
+        box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+        transition: all 0.3s ease-in-out;
     }}
 
-    /* 4. PROGRESS BARS */
+    div[data-testid="stColumn"]:hover {{
+        border: 1px solid #00f2fe !important;
+        box-shadow: 0 0 25px rgba(0, 242, 254, 0.25) !important;
+        transform: translateY(-5px);
+    }}
+
+    /* LIQUID PROGRESS BARS */
     .stProgress > div > div > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
-        border-radius: 50px;
-        height: 8px;
+        border-radius: 50px; height: 8px;
     }}
     .stProgress > div > div > div > div {{
         background: linear-gradient(90deg, #00f2fe 0%, #3a47d5 100%) !important;
         border-radius: 50px;
+        box-shadow: 0 0 10px rgba(0, 242, 254, 0.6);
     }}
 
-    /* 5. TYPOGRAPHY */
+    /* TYPOGRAPHY */
     h1, h2, h3, p, span, label, [data-testid="stMetricValue"] {{
         font-family: 'Inter', sans-serif !important;
-        font-weight: 800 !important;
-        color: white !important;
+        font-weight: 800 !important; color: white !important;
     }}
     
     [data-testid="stMetricValue"] {{ font-size: 1.6rem !important; color: #00f2fe !important; }}
 
-    /* 6. INPUTS */
-    .stTextInput>div>div, .stNumberInput>div>div, .stSelectbox>div>div {{
-        border-radius: 12px !important;
-        background: rgba(255, 255, 255, 0.04) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        color: white !important;
+    /* INPUTS & BUTTONS */
+    .stTextInput>div>div, .stNumberInput>div>div {{
+        border-radius: 12px !important; background: rgba(255, 255, 255, 0.04) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important; color: white !important;
     }}
 
-    /* 7. BUTTONS */
     .stButton>button {{
-        width: 100%;
-        border-radius: 12px !important;
+        width: 100%; border-radius: 12px !important;
         background: linear-gradient(135deg, rgba(0, 242, 254, 0.1) 0%, rgba(58, 71, 213, 0.1) 100%) !important;
-        border: 1px solid rgba(0, 242, 254, 0.3) !important;
-        color: white !important;
-        font-weight: 700 !important;
+        border: 1px solid rgba(0, 242, 254, 0.3) !important; color: white !important;
+        font-weight: 700 !important; transition: 0.3s;
+    }}
+    .stButton>button:hover {{
+        background: rgba(0, 242, 254, 0.2) !important;
+        box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -115,9 +116,8 @@ st.markdown(f"""
 def trigger_notification(title, msg):
     st.markdown(f"<script>notifyMe('{title}', '{msg}')</script>", unsafe_allow_html=True)
 
-# --- AUTH SYSTEM ---
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
+# --- 5. AUTH SYSTEM ---
+if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
     st.markdown("<h1 style='text-align: center; margin-top: 150px;'>VAULT ACCESS</h1>", unsafe_allow_html=True)
@@ -132,39 +132,38 @@ if not st.session_state['logged_in']:
                 st.rerun()
     st.stop()
 
-# --- DATA PROCESSING ---
+# --- 6. DATA & CALCULATIONS ---
 user_now = st.session_state['user']
 funds_res = supabase.table("funds").select("*").execute()
 df = pd.DataFrame(funds_res.data) if funds_res.data else pd.DataFrame()
+now = datetime.now(timezone.utc)
 
 if not df.empty:
     df["amount"] = pd.to_numeric(df["amount"])
-    # Convert created_at to datetime and ensure UTC awareness
-    df["created_at"] = pd.to_datetime(df["created_at"], utc=True) 
+    df["created_at"] = pd.to_datetime(df["created_at"], utc=True)
     df['net'] = df.apply(lambda x: x['amount'] if x['type']=='Add' else -x['amount'], axis=1)
     
-    in_amt = df[df["type"] == "Add"]["amount"].sum()
-    out_amt = df[df["type"] == "Withdraw"]["amount"].sum()
+    in_amt, out_amt = df[df["type"] == "Add"]["amount"].sum(), df[df["type"] == "Withdraw"]["amount"].sum()
     bal = in_amt - out_amt
 
-    # --- FIXED WEEKLY COMPARISON (Using timezone.utc) ---
-    now = datetime.now(timezone.utc)
-    this_week_start = now - timedelta(days=now.weekday())
-    this_week_start = this_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    # --- WEEKLY STATS ---
+    this_week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0)
     last_week_start = this_week_start - timedelta(days=7)
-
     this_week_adds = df[(df['created_at'] >= this_week_start) & (df['type'] == 'Add')]['amount'].sum()
     last_week_adds = df[(df['created_at'] >= last_week_start) & (df['created_at'] < this_week_start) & (df['type'] == 'Add')]['amount'].sum()
     
-    # --- AI PREDICTION LOGIC ---
-    last_30_days = df[df['created_at'] > (now - timedelta(days=30))]
-    daily_avg = last_30_days['net'].sum() / 30 if not last_30_days.empty else 0
+    # --- AI VELOCITY ---
+    first_entry = df['created_at'].min()
+    total_hours = (now - first_entry).total_seconds() / 3600
+    velocity = bal / total_hours if total_hours > 0 else 0
+    daily_avg = df[df['created_at'] > (now - timedelta(days=30))]['net'].sum() / 30
 else:
-    in_amt = out_amt = bal = this_week_adds = last_week_adds = daily_avg = 0
+    in_amt = out_amt = bal = this_week_adds = last_week_adds = velocity = daily_avg = 0
 
-# --- HEADER & MINIMIZED TARGETS ---
-st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Intelligence Treasury</h1></div>', unsafe_allow_html=True)
+# --- 7. DASHBOARD HEADER ---
+st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Global Intelligence Hub</h1></div>', unsafe_allow_html=True)
 
+# TARGET PILLS
 target_res = supabase.table("targets").select("*").eq("is_archived", False).execute()
 if target_res.data:
     t_cols = st.columns(len(target_res.data))
@@ -172,50 +171,43 @@ if target_res.data:
         goal = float(t['target_amount'])
         prog = min(max(bal / goal, 0), 1.0)
         with t_cols[i]:
-            st.markdown(f"<p style='font-size:0.75rem; margin-bottom:-10px;'>{t['goal_name']} • {int(prog*100)}%</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='font-size:0.7rem; margin-bottom:-10px;'>{t['goal_name']} • {int(prog*100)}%</p>", unsafe_allow_html=True)
             st.progress(prog)
-            if prog >= 1.0:
-                trigger_notification("🎯 Goal Reached!", f"Target {t['goal_name']} is 100% funded.")
+            if prog >= 1.0: trigger_notification("🎯 Goal Reached!", f"{t['goal_name']} is 100% funded.")
 
-# --- ANALYTICS ---
+# --- 8. CORE ANALYTICS ---
 st.write("")
-c_metrics, c_ai = st.columns([1.5, 1])
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Net Balance", f"LKR {bal:,.0f}")
+m2.metric("Weekly Adds", f"LKR {this_week_adds:,.0f}", delta=f"{this_week_adds - last_week_adds:,.0f} vs L/W")
+m3.metric("Growth Velocity", f"{velocity:,.2f} / hr")
+m4.metric("Expenses", f"LKR {out_amt:,.0f}")
 
-with c_metrics:
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Balance", f"LKR {bal:,.0f}")
-    m2.metric("Weekly Adds", f"LKR {this_week_adds:,.0f}", delta=f"{this_week_adds - last_week_adds:,.0f} vs Last Wk")
-    m3.metric("Total Expenses", f"LKR {out_amt:,.0f}")
+# --- 9. AI INSIGHTS & CHARTS ---
+st.write("")
+col_chart, col_ai = st.columns([2, 1])
 
-with c_ai:
+with col_chart:
+    if not df.empty:
+        df_sorted = df.sort_values("created_at")
+        df_sorted['cumulative'] = df_sorted['net'].cumsum()
+        fig = px.area(df_sorted, x="created_at", y="cumulative", title="Financial Growth Timeline")
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", height=300)
+        st.plotly_chart(fig, use_container_width=True)
+
+with col_ai:
+    st.markdown("#### 🧠 AI Projections")
     if target_res.data and daily_avg > 0:
         t = target_res.data[0]
         rem = float(t['target_amount']) - bal
         if rem > 0:
             days = int(rem / daily_avg)
-            finish = (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%b %d, %Y")
-            st.markdown(f"<div style='background:rgba(0,242,254,0.05); padding:10px; border-radius:15px; border:1px solid rgba(0,242,254,0.2);'><p style='margin:0; font-size:0.8rem;'>🧠 <b>AI Projection:</b> '{t['goal_name']}' likely finished by <b>{finish}</b> ({days} days).</p></div>", unsafe_allow_html=True)
-    else:
-        st.markdown("<p style='font-size:0.7rem; opacity:0.5;'>🧠 AI needs more data to project timeline...</p>", unsafe_allow_html=True)
+            finish = (now + timedelta(days=days)).strftime("%b %d, %Y")
+            st.info(f"Objective '{t['goal_name']}' likely secured by **{finish}** ({days} days).")
+        else: st.success("Target achieved. Set new objectives.")
+    else: st.write("AI sync in progress... Need more data.")
 
-# --- CHARTS ---
-st.write("")
-col_chart, col_dist = st.columns([2, 1])
-with col_chart:
-    if not df.empty:
-        df_sorted = df.sort_values("created_at")
-        df_sorted['cumulative'] = df_sorted['net'].cumsum()
-        fig = px.area(df_sorted, x="created_at", y="cumulative", title="Wealth Growth")
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", height=250)
-        st.plotly_chart(fig, use_container_width=True)
-
-with col_dist:
-    if not df.empty:
-        fig_pie = px.pie(df, values='amount', names='type', hole=.6, title="Flow Distro")
-        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white", showlegend=False, height=200)
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-# --- FORMS ---
+# --- 10. INTERACTION FORMS ---
 st.write("")
 f1, f2 = st.columns(2)
 with f1:
@@ -226,24 +218,23 @@ with f1:
         tn = st.text_input("Note")
         if st.form_submit_button("Sync to Cloud"):
             supabase.table("funds").insert({"type": tt, "user": user_now, "amount": ta, "note": tn}).execute()
-            trigger_notification("Sync Success", f"{tt}ed LKR {ta:,.0f} for {tn}")
+            trigger_notification("Vault Updated", f"{tt}: LKR {ta:,.0f}")
             st.rerun()
 
 with f2:
     with st.form("tg", clear_on_submit=True):
-        st.markdown("#### 🎯 Set Global Goal")
+        st.markdown("#### 🎯 Create Global Target")
         gn = st.text_input("Goal Name")
         ga = st.number_input("Target Amount", min_value=0.0)
-        if st.form_submit_button("Launch Goal"):
+        if st.form_submit_button("Deploy Goal"):
             supabase.table("targets").insert({"goal_name": gn, "target_amount": ga, "created_by": user_now}).execute()
             st.rerun()
 
-# --- RECENT ACTIVITY ---
-st.write("")
-st.markdown("#### 📜 Recent Activity")
+# --- 11. RECENT LOG ---
+st.markdown("#### 📜 Activity Feed")
 if not df.empty:
     st.dataframe(df.sort_values("created_at", ascending=False).head(5), use_container_width=True, hide_index=True)
 
-if st.sidebar.button("EXIT"):
+if st.sidebar.button("LOGOUT"):
     st.session_state.update({"logged_in": False})
     st.rerun()
