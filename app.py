@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+from st_gsheets_connection import GSheetsConnection
 import pandas as pd
 import hashlib
 
@@ -10,80 +10,36 @@ st.set_page_config(page_title="Server Fund Manager", layout="wide")
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-# --- LIQUID GLASS GUI DESIGN (Vibrant & Glossy) ---
+# --- LIQUID GLASS GUI DESIGN ---
 st.markdown("""
     <style>
-    /* Dark Gradient Base */
     .stApp {
         background: linear-gradient(135deg, #050510 0%, #101030 100%);
         color: #FFFFFF;
     }
-    
-    /* LIQUID GLASS Cards for Metrics */
     div[data-testid="stMetric"] {
-        background: rgba(255, 255, 255, 0.05); /* Very Translucent */
-        backdrop-filter: blur(25px) saturate(180%); /* Strong Blur & Saturation */
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(25px) saturate(180%);
         -webkit-backdrop-filter: blur(25px) saturate(180%);
-        
-        /* Thin Border Highlight */
         border: 1px solid rgba(255, 255, 255, 0.15); 
         border-radius: 20px;
         padding: 20px;
-        
-        /* Multi-layered Glass Shadow and Inner Glow */
-        box-shadow: 
-            0 10px 30px rgba(0, 0, 0, 0.4),            /* Main Shadow */
-            inset 0 1px 1px rgba(255, 255, 255, 0.3),   /* Top Light Edge */
-            inset 0 -1px 1px rgba(0, 0, 0, 0.2);        /* Bottom Shadow Edge */
-            
-        transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
     }
-    
-    /* Metric Card Hover Interaction */
-    div[data-testid="stMetric"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 
-            0 15px 40px rgba(0, 0, 0, 0.5),
-            inset 0 1px 1px rgba(255, 255, 255, 0.4);
-    }
-
-    /* Vibrant Blue Buttons */
     .stButton>button {
         width: 100%;
         border-radius: 14px;
-        background: linear-gradient(180deg, #007AFF 0%, #0056D2 100%); /* macOS Blue */
+        background: linear-gradient(180deg, #007AFF 0%, #0056D2 100%);
         color: white;
         border: 1px solid rgba(255, 255, 255, 0.1);
         font-weight: 600;
         height: 3em;
-        transition: 0.2s;
     }
-    
-    .stButton>button:hover {
-        opacity: 0.9;
-        transform: scale(1.02);
-    }
-
-    /* Glass Input Styling */
     .stTextInput>div>div>input {
         background-color: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
         color: white;
         border-radius: 12px;
         border: 1px solid rgba(255, 255, 255, 0.15);
-    }
-    
-    /* Secondary Table Styling */
-    .stDataFrame, .stTable {
-        background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(10px);
-        border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    /* Clean Divider */
-    hr {
-        border-color: rgba(255, 255, 255, 0.1);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -99,52 +55,60 @@ if not st.session_state['logged_in']:
     st.title("🔐 Server Fund Access")
     auth_mode = st.tabs(["Sign In", "Register Account"])
     
-    with auth_mode[1]: # SIGN UP
-        with st.container():
-            new_user = st.text_input("New Username", key="reg_user")
-            new_pass = st.text_input("New Password", type="password", key="reg_pass")
-            if st.button("Create Account"):
-                user_df = conn.read(worksheet="Users")
-                if new_user in user_df['Username'].values:
+    with auth_mode[1]: # REGISTER
+        new_user = st.text_input("New Username", key="reg_user")
+        new_pass = st.text_input("New Password", type="password", key="reg_pass")
+        if st.button("Create Account"):
+            try:
+                # Read Users sheet
+                user_df = conn.read(worksheet="Users", ttl=0)
+                if not user_df.empty and new_user in user_df['Username'].values:
                     st.error("This username is already taken.")
                 else:
                     new_user_data = pd.DataFrame([{"Username": new_user, "Password": make_hashes(new_pass)}])
                     updated_users = pd.concat([user_df, new_user_data], ignore_index=True)
                     conn.update(worksheet="Users", data=updated_users)
-                    st.success("Registration successful! Please sign in.")
+                    st.success("Account created! Now go to Sign In.")
+            except Exception as e:
+                st.error("Sheet Error: Ensure you have a tab named 'Users' with headers 'Username' and 'Password'.")
 
-    with auth_mode[0]: # LOGIN
+    with auth_mode[0]: # SIGN IN
         login_user = st.text_input("Username", key="log_user")
         login_pass = st.text_input("Password", type="password", key="log_pass")
         if st.button("Log In"):
-            user_df = conn.read(worksheet="Users")
-            hashed_input = make_hashes(login_pass)
-            if login_user in user_df['Username'].values:
-                correct_pass = user_df[user_df['Username'] == login_user]['Password'].values[0]
-                if hashed_input == correct_pass:
-                    st.session_state['logged_in'] = True
-                    st.session_state['user'] = login_user
-                    st.rerun()
+            try:
+                user_df = conn.read(worksheet="Users", ttl=0)
+                if not user_df.empty and login_user in user_df['Username'].values:
+                    correct_pass = user_df[user_df['Username'] == login_user]['Password'].values[0]
+                    if make_hashes(login_pass) == correct_pass:
+                        st.session_state['logged_in'] = True
+                        st.session_state['user'] = login_user
+                        st.rerun()
+                    else:
+                        st.error("Incorrect password.")
                 else:
-                    st.error("Incorrect password.")
-            else:
-                st.error("User not found.")
+                    st.error("User not found.")
+            except:
+                st.error("Could not connect to database. Check your Secrets and Permissions.")
     st.stop()
 
-# --- MAIN APP INTERFACE ---
+# --- MAIN APP (ONLY VISIBLE IF LOGGED IN) ---
 st.sidebar.title("👤 Profile")
 st.sidebar.write(f"Logged in as: **{st.session_state['user']}**")
 if st.sidebar.button("Logout"):
     st.session_state['logged_in'] = False
     st.rerun()
 
-# Data Loading
-df = conn.read(worksheet="Funds")
-df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce').fillna(0)
+# Load Funds
+try:
+    df = conn.read(worksheet="Funds", ttl=0)
+    df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce').fillna(0)
+except:
+    df = pd.DataFrame(columns=["Type", "User", "Amount", "Note", "Date"])
 
 st.title("📊 Server Treasury Dashboard")
 
-# Summary Section
+# Calculations
 total_in = df[df["Type"] == "Add"]["Amount"].sum()
 total_out = df[df["Type"] == "Withdraw"]["Amount"].sum()
 net_balance = total_in - total_out
@@ -156,7 +120,7 @@ m3.metric("Total Expenses", f"${total_out:,.2f}")
 
 st.divider()
 
-# Transaction Form
+# Input & Rankings
 col_input, col_stats = st.columns([1, 1.5])
 
 with col_input:
@@ -164,7 +128,7 @@ with col_input:
     with st.form("transaction_form", clear_on_submit=True):
         t_type = st.radio("Action", ["Add", "Withdraw"], horizontal=True)
         t_amount = st.number_input("Amount ($)", min_value=0.0)
-        t_note = st.text_input("Description (e.g., Hosting, Donation)")
+        t_note = st.text_input("Description")
         
         if st.form_submit_button("Record Transaction"):
             new_data = pd.DataFrame([{
@@ -176,14 +140,16 @@ with col_input:
             }])
             updated_df = pd.concat([df, new_data], ignore_index=True)
             conn.update(worksheet="Funds", data=updated_df)
-            st.success("Transaction updated!")
+            st.success("Updated!")
             st.rerun()
 
 with col_stats:
-    st.subheader("Contribution Rankings")
-    rankings = df[df["Type"] == "Add"].groupby("User")["Amount"].sum().sort_values(ascending=False).reset_index()
-    st.dataframe(rankings, use_container_width=True, hide_index=True)
+    st.subheader("Leaderboard")
+    if not df.empty:
+        rankings = df[df["Type"] == "Add"].groupby("User")["Amount"].sum().sort_values(ascending=False).reset_index()
+        st.dataframe(rankings, use_container_width=True, hide_index=True)
+    else:
+        st.info("No data yet.")
 
-# History Section
-st.subheader("📜 Recent Transactions")
+st.subheader("📜 History")
 st.dataframe(df.sort_index(ascending=False), use_container_width=True)
