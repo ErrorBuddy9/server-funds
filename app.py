@@ -1,7 +1,6 @@
 import streamlit as st
+from st_gsheets_connection import GSheetsConnection
 import pandas as pd
-import gspread
-from google.oauth2.service_account import Credentials
 import hashlib
 
 # --- PAGE CONFIG ---
@@ -30,21 +29,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- NEW STABLE CONNECTION ---
-@st.cache_resource
-def get_gsheet_client():
-    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    # This uses the public link directly for simplicity
-    gc = gspread.public_authorize("https://docs.google.com/spreadsheets/d/1tkGfZmFNIXhfl3gfj4EPTnA8Pt5R3yGcgpecR0uc4VA")
-    return gc.open_by_key("1tkGfZmFNIXhfl3gfj4EPTnA8Pt5R3yGcgpecR0uc4VA")
+# --- DIRECT CONNECTION ---
+# Using the URL directly in the code to bypass Secret formatting issues
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1tkGfZmFNIXhfl3gfj4EPTnA8Pt5R3yGcgpecR0uc4VA"
 
-try:
-    sh = get_gsheet_client()
-    user_sheet = sh.worksheet("Users")
-    fund_sheet = sh.worksheet("Funds")
-except Exception as e:
-    st.error("Connection Failed. Please ensure the Google Sheet is shared with 'Anyone with the link' as Editor.")
-    st.stop()
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+def get_data(sheet_name):
+    # This forces the app to look for the specific tab name
+    return conn.read(spreadsheet=SHEET_URL, worksheet=sheet_name, ttl=0)
 
 # --- AUTH SYSTEM ---
 if 'logged_in' not in st.session_state:
@@ -52,50 +45,45 @@ if 'logged_in' not in st.session_state:
 
 if not st.session_state['logged_in']:
     st.title("🔐 Server Fund Access")
-    auth_mode = st.tabs(["Sign In", "Register"])
+    tab1, tab2 = st.tabs(["Sign In", "Register Account"])
     
-    with auth_mode[1]: # REGISTER
-        new_user = st.text_input("New Username")
-        new_pass = st.text_input("New Password", type="password")
+    with tab2: # REGISTER
+        reg_user = st.text_input("New Username", key="r1")
+        reg_pass = st.text_input("New Password", type="password", key="r2")
         if st.button("Create Account"):
-            users = pd.DataFrame(user_sheet.get_all_records())
-            if not users.empty and new_user in users['Username'].values:
-                st.error("User exists.")
-            else:
-                user_sheet.append_row([new_user, make_hashes(new_pass)])
-                st.success("Success! Now Sign In.")
+            try:
+                df = get_data("Users")
+                if not df.empty and reg_user in df['Username'].values:
+                    st.error("Username exists.")
+                else:
+                    new_row = pd.DataFrame([{"Username": reg_user, "Password": make_hashes(reg_pass)}])
+                    updated = pd.concat([df, new_row], ignore_index=True)
+                    conn.update(spreadsheet=SHEET_URL, worksheet="Users", data=updated)
+                    st.success("Account Created! Go to Sign In.")
+            except Exception as e:
+                st.error("Cannot access 'Users' tab. Check sheet name!")
 
-    with auth_mode[0]: # SIGN IN
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
+    with tab1: # SIGN IN
+        u = st.text_input("Username", key="s1")
+        p = st.text_input("Password", type="password", key="s2")
         if st.button("Log In"):
-            users = pd.DataFrame(user_sheet.get_all_records())
-            if not users.empty and u in users['Username'].values:
-                correct_p = users[users['Username'] == u]['Password'].values[0]
-                if make_hashes(p) == correct_p:
-                    st.session_state['logged_in'] = True
-                    st.session_state['user'] = u
-                    st.rerun()
-            st.error("Invalid Login.")
+            try:
+                df = get_data("Users")
+                if not df.empty and u in df['Username'].values:
+                    stored_pass = df[df['Username'] == u]['Password'].values[0]
+                    if make_hashes(p) == str(stored_pass):
+                        st.session_state['logged_in'] = True
+                        st.session_state['user'] = u
+                        st.rerun()
+                st.error("Invalid Username or Password.")
+            except:
+                st.error("Connection Failed. Is the sheet link correct?")
     st.stop()
 
-# --- MAIN DASHBOARD ---
-st.title("📊 Server Treasury")
-df = pd.DataFrame(fund_sheet.get_all_records())
-df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce').fillna(0)
-
-# Metrics
-total = df[df["Type"] == "Add"]["Amount"].sum() - df[df["Type"] == "Withdraw"]["Amount"].sum()
-st.metric("Current Balance", f"${total:,.2f}")
-
-# Transaction Form
-with st.form("add_fund"):
-    t_type = st.radio("Type", ["Add", "Withdraw"], horizontal=True)
-    amt = st.number_input("Amount", min_value=0.0)
-    note = st.text_input("Note")
-    if st.form_submit_button("Submit"):
-        fund_sheet.append_row([t_type, st.session_state['user'], amt, note, pd.Timestamp.now().strftime("%Y-%m-%d")])
-        st.rerun()
-
-st.subheader("📜 History")
-st.dataframe(df, use_container_width=True)
+# --- APP CONTENT ---
+st.title(f"💰 Welcome, {st.session_state['user']}")
+try:
+    funds_df = get_data("Funds")
+    st.dataframe(funds_df, use_container_width=True)
+except:
+    st.warning("Could not load Fund history.")
