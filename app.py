@@ -6,7 +6,7 @@ import plotly.express as px
 from datetime import datetime, timedelta, timezone
 import numpy as np
 
-# --- 1. PAGE CONFIG: Browser Tab Title set to Dashboard ---
+# --- 1. PAGE CONFIG ---
 st.set_page_config(page_title="Dashboard", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 2. INITIALIZE SUPABASE ---
@@ -139,9 +139,9 @@ else:
 
 # --- 7. DASHBOARD MAIN HEADER ---
 st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Dashboard</h1></div>', unsafe_allow_html=True)
-st.markdown(f"<p style='opacity:0.6; margin-top:-5px;'>Professional Financial Overview • Logged in as: <b>{user_now}</b></p>", unsafe_allow_html=True)
+st.markdown(f"<p style='opacity:0.6; margin-top:-5px;'>Professional Financial Overview • User: <b>{user_now}</b></p>", unsafe_allow_html=True)
 
-# TARGETS
+# --- TARGETS WITH STATUS BAR (x/1000) ---
 target_res = supabase.table("targets").select("*").eq("is_archived", False).execute()
 if target_res.data:
     t_cols = st.columns(len(target_res.data))
@@ -149,10 +149,17 @@ if target_res.data:
         goal = float(t['target_amount'])
         prog = min(max(bal / goal, 0), 1.0)
         with t_cols[i]:
-            st.markdown(f"<p style='font-size:0.7rem; margin-bottom:-10px;'>{t['goal_name']} • {int(prog*100)}%</p>", unsafe_allow_html=True)
+            # Numerical Progress Header
+            st.markdown(f"""
+                <div style='display: flex; justify-content: space-between; align-items: flex-end;'>
+                    <span style='font-size: 0.8rem; font-weight: 600;'>{t['goal_name']}</span>
+                    <span style='font-size: 0.65rem; opacity: 0.7;'>{int(bal):,}/{int(goal):,}</span>
+                </div>
+            """, unsafe_allow_html=True)
             st.progress(prog)
+            if prog >= 1.0: trigger_notification("Achievement", f"{t['goal_name']} 100% Complete")
 
-# --- 8. ANALYTICS ---
+# --- 8. KEY ANALYTICS ---
 st.write("")
 m1, m2, m3 = st.columns(3)
 m1.metric("Current Balance", f"LKR {bal:,.0f}")
@@ -165,7 +172,7 @@ with col_chart:
     if not df.empty:
         df_sorted = df.sort_values("created_at")
         df_sorted['cumulative'] = df_sorted['net'].cumsum()
-        fig = px.area(df_sorted, x="created_at", y="cumulative", title="Equity Growth")
+        fig = px.area(df_sorted, x="created_at", y="cumulative", title="Equity Growth Timeline")
         fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", height=300)
         st.plotly_chart(fig, use_container_width=True)
 
@@ -176,10 +183,11 @@ with col_ai:
         rem = float(t['target_amount']) - bal
         if rem > 0:
             finish = (now + timedelta(days=int(rem / daily_avg))).strftime("%b %d, %Y")
-            st.info(f"Objective '{t['goal_name']}' projected: **{finish}**")
-    else: st.write("Gathering data...")
+            st.info(f"Objective '{t['goal_name']}' estimated: **{finish}**")
+        else: st.success("Target achieved.")
+    else: st.write("Awaiting data...")
 
-# --- 9. ACTIONS ---
+# --- 9. LOG ENTRY ---
 st.write("")
 f1, f2 = st.columns(2)
 with f1:
@@ -190,13 +198,14 @@ with f1:
         tn = st.text_input("Reference")
         if st.form_submit_button("Record"):
             supabase.table("funds").insert({"type": tt, "user": user_now, "amount": ta, "note": tn}).execute()
+            trigger_notification("System Update", f"Recorded {tt}: LKR {ta:,.0f}")
             st.rerun()
 
 with f2:
     with st.form("tg", clear_on_submit=True):
         st.markdown("#### 🎯 Set Target")
         gn = st.text_input("Name")
-        ga = st.number_input("Goal", min_value=0.0)
+        ga = st.number_input("Goal Value", min_value=0.0)
         if st.form_submit_button("Deploy"):
             supabase.table("targets").insert({"goal_name": gn, "target_amount": ga, "created_by": user_now}).execute()
             st.rerun()
