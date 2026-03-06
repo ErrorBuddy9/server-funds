@@ -10,36 +10,49 @@ st.set_page_config(page_title="Server Fund Manager", layout="wide")
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-# --- LIQUID GLASS GUI DESIGN ---
+# --- LIQUID GLASS GUI DESIGN (macOS Style) ---
 st.markdown("""
     <style>
+    /* Dark Deep Base */
     .stApp {
         background: linear-gradient(135deg, #050510 0%, #101030 100%);
         color: #FFFFFF;
     }
+    
+    /* High-Gloss Metric Cards */
     div[data-testid="stMetric"] {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(25px) saturate(180%);
-        -webkit-backdrop-filter: blur(25px) saturate(180%);
-        border: 1px solid rgba(255, 255, 255, 0.15); 
+        background: rgba(255, 255, 255, 0.07);
+        backdrop-filter: blur(30px) saturate(180%);
+        -webkit-backdrop-filter: blur(30px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.2); 
         border-radius: 20px;
-        padding: 20px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+        padding: 22px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
     }
+    
+    /* macOS-style Blue Buttons */
     .stButton>button {
         width: 100%;
-        border-radius: 14px;
+        border-radius: 12px;
         background: linear-gradient(180deg, #007AFF 0%, #0056D2 100%);
         color: white;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: none;
         font-weight: 600;
-        height: 3em;
+        height: 3.2em;
+        transition: 0.2s;
     }
+    
+    .stButton>button:hover {
+        transform: scale(1.02);
+        box-shadow: 0 0 15px rgba(0, 122, 255, 0.5);
+    }
+
+    /* Transparent Input Fields */
     .stTextInput>div>div>input {
         background-color: rgba(255, 255, 255, 0.1);
         color: white;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -60,17 +73,16 @@ if not st.session_state['logged_in']:
         new_pass = st.text_input("New Password", type="password", key="reg_pass")
         if st.button("Create Account"):
             try:
-                # Read Users sheet
                 user_df = conn.read(worksheet="Users", ttl=0)
                 if not user_df.empty and new_user in user_df['Username'].values:
-                    st.error("This username is already taken.")
+                    st.error("Username already taken.")
                 else:
                     new_user_data = pd.DataFrame([{"Username": new_user, "Password": make_hashes(new_pass)}])
                     updated_users = pd.concat([user_df, new_user_data], ignore_index=True)
                     conn.update(worksheet="Users", data=updated_users)
-                    st.success("Account created! Now go to Sign In.")
-            except Exception as e:
-                st.error("Sheet Error: Ensure you have a tab named 'Users' with headers 'Username' and 'Password'.")
+                    st.success("Account created! Now Sign In.")
+            except:
+                st.error("Error: Check if the 'Users' tab exists in your Google Sheet.")
 
     with auth_mode[0]: # SIGN IN
         login_user = st.text_input("Username", key="log_user")
@@ -89,17 +101,17 @@ if not st.session_state['logged_in']:
                 else:
                     st.error("User not found.")
             except:
-                st.error("Could not connect to database. Check your Secrets and Permissions.")
+                st.error("Connection failed. Check your Secrets and Sheet Permissions.")
     st.stop()
 
-# --- MAIN APP (ONLY VISIBLE IF LOGGED IN) ---
-st.sidebar.title("👤 Profile")
-st.sidebar.write(f"Logged in as: **{st.session_state['user']}**")
+# --- MAIN APP INTERFACE ---
+st.sidebar.title("👤 Account")
+st.sidebar.write(f"Active User: **{st.session_state['user']}**")
 if st.sidebar.button("Logout"):
     st.session_state['logged_in'] = False
     st.rerun()
 
-# Load Funds
+# Data Loading
 try:
     df = conn.read(worksheet="Funds", ttl=0)
     df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce').fillna(0)
@@ -108,7 +120,7 @@ except:
 
 st.title("📊 Server Treasury Dashboard")
 
-# Calculations
+# Analytics Calculations
 total_in = df[df["Type"] == "Add"]["Amount"].sum()
 total_out = df[df["Type"] == "Withdraw"]["Amount"].sum()
 net_balance = total_in - total_out
@@ -128,7 +140,7 @@ with col_input:
     with st.form("transaction_form", clear_on_submit=True):
         t_type = st.radio("Action", ["Add", "Withdraw"], horizontal=True)
         t_amount = st.number_input("Amount ($)", min_value=0.0)
-        t_note = st.text_input("Description")
+        t_note = st.text_input("Reason")
         
         if st.form_submit_button("Record Transaction"):
             new_data = pd.DataFrame([{
@@ -140,16 +152,20 @@ with col_input:
             }])
             updated_df = pd.concat([df, new_data], ignore_index=True)
             conn.update(worksheet="Funds", data=updated_df)
-            st.success("Updated!")
+            st.success("Transaction recorded!")
             st.rerun()
 
 with col_stats:
-    st.subheader("Leaderboard")
-    if not df.empty:
-        rankings = df[df["Type"] == "Add"].groupby("User")["Amount"].sum().sort_values(ascending=False).reset_index()
-        st.dataframe(rankings, use_container_width=True, hide_index=True)
+    st.subheader("Contribution Leaderboard")
+    if not df.empty and "Type" in df.columns:
+        adds = df[df["Type"] == "Add"]
+        if not adds.empty:
+            rankings = adds.groupby("User")["Amount"].sum().sort_values(ascending=False).reset_index()
+            st.dataframe(rankings, use_container_width=True, hide_index=True)
+        else:
+            st.info("No contributions recorded yet.")
     else:
-        st.info("No data yet.")
+        st.info("Leaderboard will appear after first contribution.")
 
-st.subheader("📜 History")
+st.subheader("📜 Recent Activity")
 st.dataframe(df.sort_index(ascending=False), use_container_width=True)
