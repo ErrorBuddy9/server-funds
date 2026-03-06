@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 # --- 1. PAGE CONFIG ---
-st.set_page_config(page_title="Financial Management", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Intelligence Treasury v5", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 2. INITIALIZE SUPABASE ---
 @st.cache_resource
@@ -20,7 +20,7 @@ supabase = init_connection()
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-# --- 4. CSS: LIQUID GLASS UI + HOVER GLOW + NOTIFICATION ENGINE ---
+# --- 4. CSS: LIQUID GLASS UI + DUAL LOGIN DESIGN ---
 st.markdown(f"""
     <script>
     function notifyMe(title, message) {{
@@ -38,7 +38,7 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
-    /* AGGRESSIVE ARROW KILLER (Top Left Fix) */
+    /* AGGRESSIVE ARROW KILLER */
     [data-testid="collapsedControl"], .st-emotion-cache-6qob1r, .st-emotion-cache-1f3w014, header[data-testid="stHeader"] {{
         display: none !important;
         visibility: hidden !important;
@@ -47,7 +47,7 @@ st.markdown(f"""
     
     .block-container {{ padding-top: 1.5rem !important; }}
 
-    /* LIQUID GLASS BACKGROUND (96% Dark Overlay) */
+    /* LIQUID GLASS BACKGROUND */
     .stApp {{
         background: 
             radial-gradient(circle at 50% 50%, rgba(10, 10, 25, 0.85) 0%, rgba(0,0,0,0.97) 100%),
@@ -58,7 +58,7 @@ st.markdown(f"""
         font-family: 'Inter', sans-serif !important;
     }}
     
-    /* NEON-ACCENTED GLASS PANELS WITH HOVER GLOW */
+    /* GLASS PANELS */
     div[data-testid="stColumn"], div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] > div {{
         background: rgba(255, 255, 255, 0.02) !important; 
         backdrop-filter: blur(55px) saturate(180%) !important;
@@ -72,18 +72,6 @@ st.markdown(f"""
     div[data-testid="stColumn"]:hover {{
         border: 1px solid #00f2fe !important;
         box-shadow: 0 0 25px rgba(0, 242, 254, 0.25) !important;
-        transform: translateY(-5px);
-    }}
-
-    /* LIQUID PROGRESS BARS */
-    .stProgress > div > div > div {{
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        border-radius: 50px; height: 8px;
-    }}
-    .stProgress > div > div > div > div {{
-        background: linear-gradient(90deg, #00f2fe 0%, #3a47d5 100%) !important;
-        border-radius: 50px;
-        box-shadow: 0 0 10px rgba(0, 242, 254, 0.6);
     }}
 
     /* TYPOGRAPHY */
@@ -106,33 +94,49 @@ st.markdown(f"""
         border: 1px solid rgba(0, 242, 254, 0.3) !important; color: white !important;
         font-weight: 700 !important; transition: 0.3s;
     }}
-    .stButton>button:hover {{
-        background: rgba(0, 242, 254, 0.2) !important;
-        box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
-    }}
     </style>
     """, unsafe_allow_html=True)
 
 def trigger_notification(title, msg):
     st.markdown(f"<script>notifyMe('{title}', '{msg}')</script>", unsafe_allow_html=True)
 
-# --- 5. AUTH SYSTEM ---
+# --- 5. DUAL-SIDED AUTH SYSTEM ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
-    st.markdown("<h1 style='text-align: center; margin-top: 150px;'>VAULT ACCESS</h1>", unsafe_allow_html=True)
-    _, c2, _ = st.columns([1, 0.8, 1])
-    with c2:
-        u = st.text_input("I D")
-        p = st.text_input("K E Y", type="password")
-        if st.button("AUTHENTICATE"):
-            res = supabase.table("users").select("*").eq("username", u).execute()
-            if res.data and make_hashes(p) == res.data[0]['password']:
-                st.session_state['logged_in'], st.session_state['user'] = True, u
+    st.markdown("<h1 style='text-align: center; margin-top: 80px; letter-spacing: 5px;'>TREASURY PROTOCOL</h1>", unsafe_allow_html=True)
+    st.write("")
+    
+    col_login, col_signup = st.columns(2)
+    
+    with col_login:
+        st.markdown("### 🔑 LOGIN")
+        u_log = st.text_input("Username", key="login_u")
+        p_log = st.text_input("Password", type="password", key="login_p")
+        if st.button("AUTHORIZE ACCESS"):
+            res = supabase.table("users").select("*").eq("username", u_log).execute()
+            if res.data and make_hashes(p_log) == res.data[0]['password']:
+                st.session_state['logged_in'], st.session_state['user'] = True, u_log
                 st.rerun()
+            else:
+                st.error("Invalid Credentials")
+
+    with col_signup:
+        st.markdown("### 📝 SIGN UP")
+        u_sign = st.text_input("New Username", key="sign_u")
+        p_sign = st.text_input("New Password", type="password", key="sign_p")
+        if st.button("CREATE ACCOUNT"):
+            if u_sign and p_sign:
+                try:
+                    supabase.table("users").insert({"username": u_sign, "password": make_hashes(p_sign)}).execute()
+                    st.success("Account Created! You can now log in.")
+                except:
+                    st.error("Username already exists.")
+            else:
+                st.warning("Please fill all fields.")
     st.stop()
 
-# --- 6. DATA & CALCULATIONS ---
+# --- 6. DATA & CALCULATIONS (REMAINING CODE REMAINS UNCHANGED) ---
 user_now = st.session_state['user']
 funds_res = supabase.table("funds").select("*").execute()
 df = pd.DataFrame(funds_res.data) if funds_res.data else pd.DataFrame()
@@ -161,7 +165,7 @@ else:
     in_amt = out_amt = bal = this_week_adds = last_week_adds = velocity = daily_avg = 0
 
 # --- 7. DASHBOARD HEADER ---
-st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Dashboard</h1></div>', unsafe_allow_html=True)
+st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Global Intelligence Hub</h1></div>', unsafe_allow_html=True)
 
 # TARGET PILLS
 target_res = supabase.table("targets").select("*").eq("is_archived", False).execute()
@@ -238,5 +242,3 @@ if not df.empty:
 if st.sidebar.button("LOGOUT"):
     st.session_state.update({"logged_in": False})
     st.rerun()
-
-
