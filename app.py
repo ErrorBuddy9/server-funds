@@ -1,16 +1,25 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+from supabase import create_client, Client
 import pandas as pd
 import hashlib
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Server Fund Manager", layout="wide")
 
+# --- INITIALIZE SUPABASE ---
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = init_connection()
+
 # --- PASSWORD HASHING ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-# --- GUI DESIGN ---
+# --- GUI DESIGN (KEEPING YOUR ORIGINAL STYLE) ---
 st.markdown("""
     <style>
     .stApp { background: linear-gradient(135deg, #050510 0%, #101030 100%); color: #FFFFFF; }
@@ -29,16 +38,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- DIRECT CONNECTION ---
-# Using the URL directly in the code to bypass Secret formatting issues
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1tkGfZmFNIXhfl3gfj4EPTnA8Pt5R3yGcgpecR0uc4VA"
-
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-def get_data(sheet_name):
-    # This forces the app to look for the specific tab name
-    return conn.read(spreadsheet=SHEET_URL, worksheet=sheet_name, ttl=0)
-
 # --- AUTH SYSTEM ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
@@ -51,39 +50,34 @@ if not st.session_state['logged_in']:
         reg_user = st.text_input("New Username", key="r1")
         reg_pass = st.text_input("New Password", type="password", key="r2")
         if st.button("Create Account"):
-            try:
-                df = get_data("Users")
-                if not df.empty and reg_user in df['Username'].values:
-                    st.error("Username exists.")
-                else:
-                    new_row = pd.DataFrame([{"Username": reg_user, "Password": make_hashes(reg_pass)}])
-                    updated = pd.concat([df, new_row], ignore_index=True)
-                    conn.update(spreadsheet=SHEET_URL, worksheet="Users", data=updated)
-                    st.success("Account Created! Go to Sign In.")
-            except Exception as e:
-                st.error("Cannot access 'Users' tab. Check sheet name!")
+            hashed_pw = make_hashes(reg_pass)
+            data, count = supabase.table("users").insert({"username": reg_user, "password": hashed_pw}).execute()
+            if data:
+                st.success("Account Created! Go to Sign In.")
+            else:
+                st.error("Error creating account. Username might be taken.")
 
     with tab1: # SIGN IN
         u = st.text_input("Username", key="s1")
         p = st.text_input("Password", type="password", key="s2")
         if st.button("Log In"):
-            try:
-                df = get_data("Users")
-                if not df.empty and u in df['Username'].values:
-                    stored_pass = df[df['Username'] == u]['Password'].values[0]
-                    if make_hashes(p) == str(stored_pass):
-                        st.session_state['logged_in'] = True
-                        st.session_state['user'] = u
-                        st.rerun()
-                st.error("Invalid Username or Password.")
-            except:
-                st.error("Connection Failed. Is the sheet link correct?")
+            response = supabase.table("users").select("*").eq("username", u).execute()
+            if response.data:
+                stored_hash = response.data[0]['password']
+                if make_hashes(p) == stored_hash:
+                    st.session_state['logged_in'] = True
+                    st.session_state['user'] = u
+                    st.rerun()
+            st.error("Invalid Username or Password.")
     st.stop()
 
-# --- APP CONTENT ---
+# --- MAIN APP ---
 st.title(f"💰 Welcome, {st.session_state['user']}")
-try:
-    funds_df = get_data("Funds")
-    st.dataframe(funds_df, use_container_width=True)
-except:
-    st.warning("Could not load Fund history.")
+
+# Fetch Funds Data
+funds_response = supabase.table("funds").select("*").execute()
+if funds_response.data:
+    df = pd.DataFrame(funds_response.data)
+    st.dataframe(df, use_container_width=True)
+else:
+    st.info("No fund records found.")
