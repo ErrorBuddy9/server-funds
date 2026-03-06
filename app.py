@@ -1,5 +1,5 @@
 import streamlit as st
-from st_gsheets_connection import GSheetsConnection
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import hashlib
 
@@ -169,3 +169,4 @@ with col_stats:
 
 st.subheader("📜 Recent Activity")
 st.dataframe(df.sort_index(ascending=False), use_container_width=True)
+
