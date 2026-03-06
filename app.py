@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 # --- 1. PAGE CONFIG ---
-st.set_page_config(page_title="Intelligence Treasury v5", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Financial Management", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 2. INITIALIZE SUPABASE ---
 @st.cache_resource
@@ -238,3 +238,4 @@ if not df.empty:
 if st.sidebar.button("LOGOUT"):
     st.session_state.update({"logged_in": False})
     st.rerun()
+
