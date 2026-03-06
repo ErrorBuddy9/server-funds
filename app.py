@@ -58,7 +58,8 @@ st.markdown(f"""
         font-family: 'Inter', sans-serif !important;
     }}
     
-    div[data-testid="stColumn"], div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] > div {{
+    /* UNIVERSAL GLASS CARD DESIGN */
+    div[data-testid="stColumn"], div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] > div, .stDataFrame {{
         background: rgba(255, 255, 255, 0.02) !important; 
         backdrop-filter: blur(55px) saturate(180%) !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -67,7 +68,7 @@ st.markdown(f"""
         transition: all 0.3s ease-in-out;
     }}
 
-    div[data-testid="stColumn"]:hover {{
+    div[data-testid="stColumn"]:hover, .stDataFrame:hover {{
         border: 1px solid #00f2fe !important;
         box-shadow: 0 0 25px rgba(0, 242, 254, 0.25) !important;
     }}
@@ -141,7 +142,7 @@ else:
 st.markdown('<div style="display:flex; align-items:center;"><span style="font-family: Arial; font-size:32px; color:#00f2fe; margin-right:15px; filter:drop-shadow(0 0 10px #00f2fe);">✦</span><h1 style="margin:0;">Dashboard</h1></div>', unsafe_allow_html=True)
 st.markdown(f"<p style='opacity:0.6; margin-top:-5px;'>Professional Financial Overview • User: <b>{user_now}</b></p>", unsafe_allow_html=True)
 
-# --- TARGETS WITH STATUS BAR (x/1000) ---
+# TARGET PROGRESS
 target_res = supabase.table("targets").select("*").eq("is_archived", False).execute()
 if target_res.data:
     t_cols = st.columns(len(target_res.data))
@@ -149,7 +150,6 @@ if target_res.data:
         goal = float(t['target_amount'])
         prog = min(max(bal / goal, 0), 1.0)
         with t_cols[i]:
-            # Numerical Progress Header
             st.markdown(f"""
                 <div style='display: flex; justify-content: space-between; align-items: flex-end;'>
                     <span style='font-size: 0.8rem; font-weight: 600;'>{t['goal_name']}</span>
@@ -157,9 +157,8 @@ if target_res.data:
                 </div>
             """, unsafe_allow_html=True)
             st.progress(prog)
-            if prog >= 1.0: trigger_notification("Achievement", f"{t['goal_name']} 100% Complete")
 
-# --- 8. KEY ANALYTICS ---
+# --- 8. KEY METRICS & ANALYTICS ---
 st.write("")
 m1, m2, m3 = st.columns(3)
 m1.metric("Current Balance", f"LKR {bal:,.0f}")
@@ -185,9 +184,8 @@ with col_ai:
             finish = (now + timedelta(days=int(rem / daily_avg))).strftime("%b %d, %Y")
             st.info(f"Objective '{t['goal_name']}' estimated: **{finish}**")
         else: st.success("Target achieved.")
-    else: st.write("Awaiting data...")
 
-# --- 9. LOG ENTRY ---
+# --- 9. INTERACTION FORMS ---
 st.write("")
 f1, f2 = st.columns(2)
 with f1:
@@ -209,6 +207,25 @@ with f2:
         if st.form_submit_button("Deploy"):
             supabase.table("targets").insert({"goal_name": gn, "target_amount": ga, "created_by": user_now}).execute()
             st.rerun()
+
+# --- 10. INTERACTION HISTORY (GLASSY CARD) ---
+st.write("")
+st.markdown("#### 📜 Interaction History")
+if not df.empty:
+    # Sort by newest first
+    history_df = df.sort_values("created_at", ascending=False).head(10)
+    # Rename columns for professional look
+    history_df = history_df[["type", "amount", "note", "user", "created_at"]]
+    history_df.columns = ["Type", "Amount (LKR)", "Reference", "User", "Timestamp"]
+    
+    # Render inside a glassy card container
+    st.dataframe(
+        history_df, 
+        use_container_width=True, 
+        hide_index=True
+    )
+else:
+    st.info("No transaction history available yet.")
 
 if st.sidebar.button("EXIT"):
     st.session_state.update({"logged_in": False})
